@@ -1,0 +1,19 @@
+# How datamend may test fixes for this repo's flows without touching production.
+warehouse:
+  type: duckdb
+  path_variable: warehouse_path      # Prefect variable that holds the warehouse path
+
+deployments:
+  orders-etl/daily:
+    prod_schema: analytics
+    shadow:
+      parameters: {target_schema: "dm_shadow_{run}"}   # every write goes to a throwaway schema
+      schema_name: "dm_shadow_{run}"
+    compare:
+      - {table: orders, key: order_id}
+    allowed_paths: ["flows/**", "tests/**"]
+    tests: "pytest -q"
+
+limits:
+  max_attempts: 2
+  max_diff_lines: 60
