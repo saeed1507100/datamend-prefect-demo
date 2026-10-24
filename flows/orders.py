@@ -1,10 +1,12 @@
 """Daily orders ETL: vendor feed -> DuckDB warehouse."""
 
 import json
+import logging
 from pathlib import Path
 
 import duckdb
 from prefect import flow, get_run_logger, task
+from prefect.exceptions import MissingContextError
 from prefect.variables import Variable
 
 FEED = Path(__file__).parent.parent / "data" / "vendor_orders.json"
@@ -17,7 +19,19 @@ def extract() -> list[dict]:
 
 @task
 def transform(rows: list[dict]) -> list[tuple]:
-    return [(int(r["id"]), r["customer"], float(r["amount"]), r["currency"]) for r in rows]
+    try:
+        logger = get_run_logger()
+    except MissingContextError:  # called via transform.fn outside a run
+        logger = logging.getLogger(__name__)
+    out = []
+    for r in rows:
+        try:
+            # Vendor sometimes formats amounts as "$2,369.53" or "1,524.35".
+            amount = float(str(r["amount"]).strip().replace("$", "").replace(",", ""))
+            out.append((int(r["id"]), r["customer"], amount, r["currency"]))
+        except (ValueError, KeyError, TypeError):
+            logger.error("skipping malformed order record: %r", r)
+    return out
 
 
 @task
