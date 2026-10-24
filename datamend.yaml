@@ -10,10 +10,20 @@ deployments:
       parameters: {target_schema: "dm_shadow_{run}"}   # every write goes to a throwaway schema
       schema_name: "dm_shadow_{run}"
     compare:
-      - {table: orders, key: order_id}
+      - table: orders
+        key: order_id
+        expectations:                  # what a correct fix must produce
+          row_count: at_least_prod     # recovering failed rows may add rows, never lose them
+          keys: superset_of_prod
+          nulls: {order_id: 0, amount: 0}
+          sums_within: {amount: 0.001} # existing orders keep their amounts
     allowed_paths: ["flows/**", "tests/**"]
     tests: "pytest -q"
 
 limits:
   max_attempts: 2
   max_diff_lines: 60
+  min_confidence: 1.0                  # below this, escalate to a person instead of a PR
+
+reviewers: [saeed1507100]
+labels: [datamend]
